@@ -1,0 +1,123 @@
+---
+# tasks file for backup-collect
+
+# - check all folders for latest metadata file
+# - read metadata and check sha1 hash
+# - compress all archive and metadata to one archive
+# - push archive to s3
+
+- local_action: shell date -u +'%F %T'
+  register: start_timestamp
+  sudo: no
+
+- name: Collect latest metadata files in every directory
+  command: "bash -c 'ls -t1 *.json|head -n 1'"
+  args:
+    chdir: "{{ item }}"
+  register: metadata_files
+  with_items: "{{ backup_collect_folders }}"
+
+# - name: Check metadata files
+#   debug: msg="{{ item.stdout }}"
+#   with_items: "{{ metadata_files.results }}"
+
+- name: Collect metadata json content
+  command: "cat {{ item.stdout }}"
+  args:
+    chdir: "{{ item.item }}"
+  register: metadata_files_content
+  with_items: "{{ metadata_files.results }}"
+
+- name: Collect all metadata to array
+  set_fact:
+    backup_collect_all_metadata: "{{ backup_collect_all_metadata | default([]) + [ ( item.stdout | from_json ) ] }}"
+  with_items: "{{ metadata_files_content.results }}"
+
+- local_action: shell date -u +'%F %T' --date '{{ backup_collect_too_old }}'
+  register: date_too_old
+  sudo: no
+
+- name: Check end_timestamp
+  fail: msg="Archive too old! {{ (item.stdout | from_json).filename }} {{ (item.stdout | from_json).end_timestamp }} < {{ date_too_old.stdout }} "
+  when: "{{ (item.stdout | from_json).end_timestamp < date_too_old.stdout }}"
+  with_items: "{{ metadata_files_content.results }}"
+
+# item.item.item is the dir the file placed in, because of the loops before
+- name: SHA1 checksum check
+  stat:
+    path: "{{ item.item.item }}/{{ (item.stdout | from_json).filename }}"
+    get_md5: False
+  register: real_sha1_list # TODO at this point I wanted to access the stat return (in the loop), but I was not able to do it (how to access actual result in the loop??).
+  with_items: "{{ metadata_files_content.results }}"
+
+- name: Compare sha1 (real file and the one in metadata)
+  fail: msg="Sha1 differs"
+  with_indexed_items: "{{ real_sha1_list.results }}"
+  when: "'{{ item.1.stat.checksum }}' != '{{ (metadata_files_content.results[item.0].stdout | from_json).sha1 }}'"
+
+- name: Collect files to archive (all tar.gz and metadata file)
+  set_fact: backup_collect_file_list="{{ backup_collect_file_list | default([]) }} + [ '{{ item.item.item }}/{{ (item.stdout | from_json).filename }}', '{{ item.item.item }}/{{ item.item.stdout }}' ]"
+  with_items: "{{ metadata_files_content.results }}"
+
+- name: Set actual filename variable
+  set_fact: backup_collect_full_filename="all_{{ lookup('pipe', 'date -u +%Y%m%d-%H%M%S') }}.tgz"
+
+- name: Create archive dir
+  file:
+    path: "{{ backup_collect_archive_dir }}"
+    state: directory
+    recurse: yes
+
+- name: Compress big archive
+  command: "tar czfvp {{ backup_collect_full_filename }} {{ backup_collect_file_list | join(' ') }}"
+  args:
+    chdir: "{{ backup_collect_archive_dir }}"
+
+- name: Encrypt archive with openssl aes
+# TODO we should pass the password more secure. pipe or env is not better, password file should be created maybe
+  command: "openssl aes-256-cbc -pass pass:{{ backup_collect_archive_crypt_password }} -in {{ backup_collect_archive_dir }}/{{ backup_collect_full_filename }} -out {{ backup_collect_archive_dir }}/{{ backup_collect_full_filename }}.crypt"
+# for decrypt use -d after aes-... command
+
+- local_action: shell date +'%F %T'
+  register: end_timestamp
+  sudo: no
+
+- name: Get full pack size
+  stat:
+    path: "{{ backup_collect_archive_dir }}/{{ backup_collect_full_filename }}.crypt"
+    get_md5: False
+  register: full_archive_stat
+
+- name: Set metadata
+  set_fact:
+    backup_metadata:
+      filename: "{{ backup_collect_full_filename }}"
+      start_timestamp: "{{ start_timestamp.stdout }}"
+      end_timestamp: "{{ end_timestamp.stdout }}"
+      size: "{{ full_archive_stat.stat.size }}"
+      sha1: "{{ full_archive_stat.stat.checksum }}"
+      sub: "{{ backup_collect_all_metadata }}"
+
+- name: Create metadata file
+  copy:
+    content: "{{ backup_metadata | to_nice_json }}"
+    dest: "{{ backup_collect_archive_dir }}/{{ backup_collect_full_filename }}.json"
+
+- name: Upload to s3
+  s3:
+    bucket: "{{ backup_s3_bucket_name }}"
+    mode: put
+    src: "{{ backup_collect_archive_dir }}/{{ backup_collect_full_filename }}.crypt"
+    object: "/full/{{ backup_collect_full_filename }}.crypt"
+    headers: 'x-amz-storage-class=STANDARD_IA' # cheaper storage for infrequent access
+    aws_access_key: "{{ backup_s3_access_key }}"
+    aws_secret_key: "{{ backup_s3_secret_access_key }}"
+    region: "{{ backup_s3_region_name }}"
+  tags: backup-s3
+
+- include: gc.yml
+  tags: backup-gc
+
+- name: Log success
+  command: "/usr/bin/logger -p user.info \"Backup collect successful. Filename: {{ backup_collect_full_filename }}.crypt Filesize: {{ full_archive_stat.stat.size }} Sha1: {{ full_archive_stat.stat.checksum }}\""
+  tags: backup-log

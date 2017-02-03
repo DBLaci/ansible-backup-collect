@@ -1,0 +1,20 @@
+---
+# defaults file for backup-collect
+
+backup_collect_folders:
+  - "/home/backup/Shared/dir1"
+
+backup_collect_archive_dir: "/home/backup"
+
+# 1.5 day is reasonable for daily backups
+backup_collect_too_old: "-36 hour"
+
+backup_s3_bucket_name: "unique.bucket.name.domain.com"
+backup_s3_bucket_prefix: "full/" # optional "subdirectory"
+backup_s3_region_name: "eu-west-1" # region contant list: http://docs.aws.amazon.com/general/latest/gr/rande.html
+
+# you have to set these!
+backup_collect_archive_crypt_password: ""
+
+backup_s3_access_key: ""
+backup_s3_secret_access_key: ""

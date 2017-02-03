@@ -1,0 +1,32 @@
+---
+
+# remove obsolete archives from the collect folders
+# we do this after a complete upload is finished, so it is safe to remove files.
+
+- name: Collect latest metadata files in every directory
+  command: "bash -c 'find {{ item }} -name \"*.json\" -printf \"%T@ %p\n\" | sort -nr  | cut -d \" \" -f 2 | tail -n +2'" # from the second line
+  register: metadata_files
+  with_items: "{{ backup_collect_folders + [ backup_collect_archive_dir ] }}"
+
+- name: Collect metadata json content - for filename
+  set_fact:
+    json_list: "{{ json_list | default([]) + item.stdout_lines }}"
+  with_items: "{{ metadata_files.results }}"
+
+- name: Remove archive files
+  file:
+    path: "{{ item | replace('.json', '') }}"
+    state: absent
+  with_items: "{{ json_list }}"
+
+- name: Remove archive files - crypted if exists
+  file:
+    path: "{{ item | replace('.json', '') }}.crypt"
+    state: absent
+  with_items: "{{ json_list }}"
+
+- name: Remove metadata files
+  file:
+    path: "{{ item }}"
+    state: absent
+  with_items: "{{ json_list }}"
