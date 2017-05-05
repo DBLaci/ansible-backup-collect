@@ -39,7 +39,7 @@
 
 - name: Check end_timestamp
   fail: msg="Archive too old! {{ (item.stdout | from_json).filename }} {{ (item.stdout | from_json).end_timestamp }} < {{ date_too_old.stdout }} "
-  when: "{{ (item.stdout | from_json).end_timestamp < date_too_old.stdout }}"
+  when: "(item.stdout | from_json).end_timestamp < date_too_old.stdout"
   with_items: "{{ metadata_files_content.results }}"
 
 # item.item.item is the dir the file placed in, because of the loops before
