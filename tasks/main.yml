@@ -8,7 +8,7 @@
 
 - local_action: shell date -u +'%F %T'
   register: start_timestamp
-  sudo: no
+  become: no
 
 - name: Collect latest metadata files in every directory
   command: "bash -c 'ls -t1 *.json|head -n 1'"
@@ -35,7 +35,7 @@
 
 - local_action: shell date -u +'%F %T' --date '{{ backup_collect_too_old }}'
   register: date_too_old
-  sudo: no
+  become: no
 
 - name: Check end_timestamp
   fail: msg="Archive too old! {{ (item.stdout | from_json).filename }} {{ (item.stdout | from_json).end_timestamp }} < {{ date_too_old.stdout }} "
@@ -53,7 +53,7 @@
 - name: Compare sha1 (real file and the one in metadata)
   fail: msg="Sha1 differs"
   with_indexed_items: "{{ real_sha1_list.results }}"
-  when: "'{{ item.1.stat.checksum }}' != '{{ (metadata_files_content.results[item.0].stdout | from_json).sha1 }}'"
+  when: "item.1.stat.checksum != (metadata_files_content.results[item.0].stdout | from_json).sha1"
 
 - name: Collect files to archive (all tar.gz and metadata file)
   set_fact: backup_collect_file_list="{{ backup_collect_file_list | default([]) }} + [ '{{ item.item.item }}/{{ (item.stdout | from_json).filename }}', '{{ item.item.item }}/{{ item.item.stdout }}' ]"
@@ -80,7 +80,7 @@
 
 - local_action: shell date +'%F %T'
   register: end_timestamp
-  sudo: no
+  become: no
 
 - name: Get full pack size
   stat:
@@ -120,6 +120,9 @@
 
 - include: gc.yml
   tags: backup-gc
+
+- include: s3_rotate.yml
+  tags: backup-s3-rotate
 
 - name: Log success
   command: "/usr/bin/logger -p user.info \"Backup collect successful. Filename: {{ backup_collect_full_filename }}.crypt Filesize: {{ full_archive_stat.stat.size }} Sha1: {{ full_archive_stat.stat.checksum }}\""
