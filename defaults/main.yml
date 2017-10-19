@@ -18,3 +18,4 @@ backup_collect_archive_crypt_password: ""
 
 backup_s3_access_key: ""
 backup_s3_secret_access_key: ""
+backup_s3_host: "s3.amazonaws.com"

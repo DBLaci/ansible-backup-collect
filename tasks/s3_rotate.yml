@@ -4,7 +4,7 @@
 # https://github.com/simeonvandersteen/python-rotate-backups-s3
 
 - name: Rotate backups
-  command: "/usr/local/bin/rotate-backups-s3 -U {{ backup_s3_access_key }} -P {{ backup_s3_secret_access_key }} -d 7 -w 4 -m 1000 -x *.crypt s3://{{ backup_s3_bucket_name }}/{{ backup_s3_bucket_prefix }}"
+  command: "/usr/local/bin/rotate-backups-s3 -U {{ backup_s3_access_key }} -P {{ backup_s3_secret_access_key }} -d 7 -w 4 -m 1000 -x *.crypt --aws-host={{ backup_s3_host }} s3://{{ backup_s3_bucket_name }}/{{ backup_s3_bucket_prefix }}"
 
 - name: Rotate backups (metadata)
-  command: "/usr/local/bin/rotate-backups-s3 -U {{ backup_s3_access_key }} -P {{ backup_s3_secret_access_key }} -d 7 -w 4 -m 1000 -x *.json s3://{{ backup_s3_bucket_name }}/{{ backup_s3_bucket_prefix }}"
+  command: "/usr/local/bin/rotate-backups-s3 -U {{ backup_s3_access_key }} -P {{ backup_s3_secret_access_key }} -d 7 -w 4 -m 1000 -x *.json --aws-host={{ backup_s3_host }} s3://{{ backup_s3_bucket_name }}/{{ backup_s3_bucket_prefix }}"
