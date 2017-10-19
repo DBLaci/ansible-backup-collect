@@ -104,11 +104,11 @@
     dest: "{{ backup_collect_archive_dir }}/{{ backup_collect_full_filename }}.json"
 
 - name: Upload to s3
-  s3:
+  aws_s3:
     bucket: "{{ backup_s3_bucket_name }}"
     mode: put
     src: "{{ backup_collect_archive_dir }}/{{ item }}"
-    object: "/{{ backup_s3_bucket_prefix }}/{{ item }}"
+    object: "{{ backup_s3_bucket_prefix }}{{ item }}"
     headers: 'x-amz-storage-class=STANDARD_IA' # cheaper storage for infrequent access
     aws_access_key: "{{ backup_s3_access_key }}"
     aws_secret_key: "{{ backup_s3_secret_access_key }}"
@@ -121,7 +121,7 @@
 - include: gc.yml
   tags: backup-gc
 
-- include: s3_rotate.yml
+- include_tasks: s3_rotate.yml
   tags: backup-s3-rotate
 
 - name: Log success
